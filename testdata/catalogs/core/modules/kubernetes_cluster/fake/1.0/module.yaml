@@ -1,0 +1,11 @@
+kind: kubernetes_cluster
+flavor: fake
+version: "1.0"
+spec:
+  type: object
+  required: [cluster_name]
+  additionalProperties: false
+  properties:
+    cluster_name: { type: string }
+outputs:
+  default: { type: core/kubernetes_cluster }

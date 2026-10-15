@@ -1,0 +1,6 @@
+overrides:
+  application/checkout-api:
+    spec:
+      replicas: 5
+      env:
+        LOG_LEVEL: warn

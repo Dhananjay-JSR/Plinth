@@ -1,0 +1,19 @@
+kind: application
+flavor: fake
+version: "1.0"
+spec:
+  type: object
+  required: [image, port]
+  additionalProperties: false
+  properties:
+    image: { type: string }
+    port: { type: integer, minimum: 1, maximum: 65535 }
+    replicas: { type: integer, minimum: 1, default: 1 }
+    env:
+      type: object
+      additionalProperties: { type: string }
+inputs:
+  kubernetes_details: { type: core/kubernetes_cluster }
+  cache: { type: core/redis, optional: true }
+outputs:
+  default: { type: core/application }

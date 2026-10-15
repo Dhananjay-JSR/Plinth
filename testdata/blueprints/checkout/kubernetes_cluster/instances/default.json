@@ -1,0 +1,6 @@
+{
+  "kind": "kubernetes_cluster",
+  "flavor": "fake",
+  "version": "1.0",
+  "spec": { "cluster_name": "checkout" }
+}

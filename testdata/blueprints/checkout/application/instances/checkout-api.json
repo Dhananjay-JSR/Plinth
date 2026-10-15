@@ -1,0 +1,17 @@
+{
+  "kind": "application",
+  "flavor": "fake",
+  "version": "1.0",
+  "inputs": {
+    "kubernetes_details": { "kind": "kubernetes_cluster", "name": "default" }
+  },
+  "spec": {
+    "image": "checkout-api:v1.4",
+    "port": 8080,
+    "replicas": 2,
+    "env": {
+      "LOG_LEVEL": "info",
+      "CLUSTER": "${kubernetes_cluster.default.out.default.attributes.cluster_name}"
+    }
+  }
+}
