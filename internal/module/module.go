@@ -24,8 +24,8 @@ const ContractFile = "module.yaml"
 var (
 	// No "__" in a kind: generated module calls are named <kind>__<name>.
 	KindPattern       = regexp.MustCompile(`^[a-z][a-z0-9]*(_[a-z0-9]+)*$`)
-	identPattern      = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
-	versionPattern    = regexp.MustCompile(`^[0-9A-Za-z][0-9A-Za-z._-]*$`)
+	IdentPattern      = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
+	VersionPattern    = regexp.MustCompile(`^[0-9A-Za-z][0-9A-Za-z._-]*$`)
 	OutputTypePattern = regexp.MustCompile(`^[a-z][a-z0-9_]*/[a-z][a-z0-9_]*$`)
 )
 
@@ -78,14 +78,14 @@ func (m *Module) check() error {
 	if !KindPattern.MatchString(m.Kind) {
 		errs = append(errs, fmt.Errorf("kind %q must be lower_snake_case without double underscores", m.Kind))
 	}
-	if !identPattern.MatchString(m.Flavor) {
+	if !IdentPattern.MatchString(m.Flavor) {
 		errs = append(errs, fmt.Errorf("flavor %q must be lower_snake_case", m.Flavor))
 	}
-	if !versionPattern.MatchString(m.Version) {
+	if !VersionPattern.MatchString(m.Version) {
 		errs = append(errs, fmt.Errorf("version %q is invalid", m.Version))
 	}
 	for name, in := range m.Inputs {
-		if !identPattern.MatchString(name) {
+		if !IdentPattern.MatchString(name) {
 			errs = append(errs, fmt.Errorf("input %q must be lower_snake_case", name))
 		}
 		if !OutputTypePattern.MatchString(in.Type) {
@@ -93,7 +93,7 @@ func (m *Module) check() error {
 		}
 	}
 	for name, out := range m.Outputs {
-		if !identPattern.MatchString(name) {
+		if !IdentPattern.MatchString(name) {
 			errs = append(errs, fmt.Errorf("output %q must be lower_snake_case", name))
 		}
 		if !OutputTypePattern.MatchString(out.Type) {
