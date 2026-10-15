@@ -1,0 +1,15 @@
+{
+  "generator": "plinth-generator/0.1.0",
+  "environment": "prod",
+  "modules": {
+    "application/fake/1.0": {
+      "catalog": "core",
+      "digest": "sha256:153fb86efca5e980c719841c5b7b125fe03993107ebc4fa20afa1bded1438220"
+    },
+    "kubernetes_cluster/fake/1.0": {
+      "catalog": "core",
+      "digest": "sha256:97f360846e8b1eec1d22cc8d07a38f01e2d0d15270cca4fd3755fb1b24627003"
+    }
+  },
+  "effective_config": "sha256:bf49699a163b43d3ec9af0c26d1c7193f9500c5a3ece1fd111c39c13b292a3f3"
+}
