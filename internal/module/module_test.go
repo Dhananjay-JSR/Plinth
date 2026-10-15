@@ -1,0 +1,97 @@
+package module
+
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+func write(t *testing.T, contract string) string {
+	t.Helper()
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ContractFile), []byte(contract), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
+const app = `
+kind: application
+flavor: fake
+version: "1.0"
+spec:
+  type: object
+  required: [image]
+  additionalProperties: false
+  properties:
+    image: { type: string }
+    replicas: { type: integer, minimum: 1 }
+    env:
+      type: object
+      additionalProperties: { type: string }
+inputs:
+  kubernetes_details: { type: core/kubernetes_cluster }
+  cache: { type: core/redis, optional: true }
+outputs:
+  default: { type: core/application }
+`
+
+func TestLoad(t *testing.T) {
+	m, err := Load(write(t, app))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.ID() != "application/fake/1.0" {
+		t.Errorf("ID = %q", m.ID())
+	}
+	if !m.Inputs["cache"].Optional || m.Inputs["kubernetes_details"].Optional {
+		t.Errorf("optional flags wrong: %+v", m.Inputs)
+	}
+}
+
+func TestLoadRejectsBadContract(t *testing.T) {
+	for name, tc := range map[string]struct{ contract, want string }{
+		"double underscore kind": {"kind: a__b\nflavor: f\nversion: \"1\"\n", "double underscores"},
+		"untyped catalog":        {"kind: a\nflavor: f\nversion: \"1\"\noutputs:\n  default: { type: kubernetes_cluster }\n", "<catalog>/<name>"},
+		"unknown field":          {"kind: a\nflavor: f\nversion: \"1\"\nintent: a\n", "intent"},
+		"bad schema":             {"kind: a\nflavor: f\nversion: \"1\"\nspec: { type: nope }\n", "spec schema"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := Load(write(t, tc.contract))
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("err = %v, want containing %q", err, tc.want)
+			}
+		})
+	}
+}
+
+func TestValidateSpec(t *testing.T) {
+	m, err := Load(write(t, app))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, tc := range map[string]struct {
+		spec map[string]any
+		want string // "" = valid
+	}{
+		"valid":                {map[string]any{"image": "nginx", "replicas": 2}, ""},
+		"missing required":     {map[string]any{"replicas": 2}, "missing property 'image'"},
+		"wrong type":           {map[string]any{"image": "nginx", "replicas": "two"}, "spec/replicas"},
+		"below minimum":        {map[string]any{"image": "nginx", "replicas": 0}, "spec/replicas"},
+		"unknown field":        {map[string]any{"image": "nginx", "replica": 2}, "replica"},
+		"reference tolerated":  {map[string]any{"image": "nginx", "replicas": "${scaler.default.out.default.attributes.n}"}, ""},
+		"nested reference":     {map[string]any{"image": "nginx", "env": map[string]any{"HOST": "${db.main.out.default.attributes.host}"}}, ""},
+		"other errors survive": {map[string]any{"image": 3, "replicas": "${x.y.out.default.n}"}, "spec/image"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			err := m.ValidateSpec(tc.spec)
+			switch {
+			case tc.want == "" && err != nil:
+				t.Fatalf("unexpected error: %v", err)
+			case tc.want != "" && (err == nil || !strings.Contains(err.Error(), tc.want)):
+				t.Fatalf("err = %v, want containing %q", err, tc.want)
+			}
+		})
+	}
+}
