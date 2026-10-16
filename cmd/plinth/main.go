@@ -23,6 +23,7 @@ const usage = `usage:
   plinth destroy  [-blueprint DIR] -env NAME [-auto-approve]
   plinth drift    [-blueprint DIR] -env NAME
   plinth init     [DIR]
+  plinth add      [-blueprint DIR] -module FLAVOR/VERSION KIND/NAME
   plinth module init [-kind K -flavor F -version V] DIR
   plinth module validate DIR
   plinth --version
@@ -66,6 +67,8 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return destroyCommand(args[1:], stdin, stdout, stderr)
 	case "drift":
 		return driftCommand(args[1:], stdout, stderr)
+	case "add":
+		return addCommand(args[1:], stdout, stderr)
 	case "init":
 		return initCommand(args[1:], stdout, stderr)
 	case "module":

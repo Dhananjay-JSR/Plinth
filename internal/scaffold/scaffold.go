@@ -2,12 +2,16 @@
 package scaffold
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/Dhananjay-JSR/Plinth/internal/blueprint"
+	"github.com/Dhananjay-JSR/Plinth/internal/module"
 )
 
 // Gitignore keeps generated workspaces and local state, which can hold
@@ -113,4 +117,51 @@ output "default" {
 }
 `,
 	}
+}
+
+// Instance is a resource instance pre-filled from a module's contract: each
+// required spec field gets its schema default, first enum value, or an empty
+// value of its type. It returns the fields still to fill in.
+func Instance(m *module.Module, inputs map[string]blueprint.InputRef) (string, []string) {
+	spec := map[string]any{}
+	var todo []string
+	props, _ := m.Spec["properties"].(map[string]any)
+	required, _ := m.Spec["required"].([]any)
+	for _, r := range required {
+		name, _ := r.(string)
+		prop, _ := props[name].(map[string]any)
+		typ, _ := prop["type"].(string)
+		switch enum, _ := prop["enum"].([]any); {
+		case prop["default"] != nil:
+			spec[name] = prop["default"]
+		case len(enum) > 0:
+			spec[name] = enum[0]
+		default:
+			spec[name] = zero(typ)
+			todo = append(todo, fmt.Sprintf("spec.%s (%s)", name, typ))
+		}
+	}
+	inst := struct {
+		Kind    string                        `json:"kind"`
+		Flavor  string                        `json:"flavor"`
+		Version string                        `json:"version"`
+		Inputs  map[string]blueprint.InputRef `json:"inputs,omitempty"`
+		Spec    map[string]any                `json:"spec"`
+	}{m.Kind, m.Flavor, m.Version, inputs, spec}
+	b, _ := json.MarshalIndent(inst, "", "  ") // only plain values: cannot fail
+	return string(b) + "\n", todo
+}
+
+func zero(typ string) any {
+	switch typ {
+	case "integer", "number":
+		return 0
+	case "boolean":
+		return false
+	case "object":
+		return map[string]any{}
+	case "array":
+		return []any{}
+	}
+	return ""
 }
