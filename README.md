@@ -281,3 +281,7 @@ mise exec -- go test ./internal/generate -update  # refresh golden files after a
 ```
 
 Releases are cut by pushing a `vX.Y.Z` tag.
+
+## License
+
+Apache-2.0. See [LICENSE](LICENSE).
