@@ -100,14 +100,21 @@ func TestDriftDetected(t *testing.T) {
 case "$*" in
   "version -json") echo '{"terraform_version":"1.13.1"}' ;;
   *" init "*) exit 0 ;;
-  *"-refresh-only"*) echo "Objects have changed outside of OpenTofu"; exit 2 ;;
+  *"-refresh-only"*) exit 2 ;;
+  *"show -json"*) cat <<'JSON'
+`+driftJSON+`
+JSON
+  ;;
   *) exit 1 ;;
 esac
 `)
 	os.Chmod(filepath.Join(bin, "tofu"), 0o755)
 	t.Setenv("PATH", bin+":/usr/bin:/bin")
 
-	plinth("", "drift", "-blueprint", copyBlueprint(t), "-env", "prod").expect(t, 2, "prod has drifted")
+	r := plinth("", "drift", "-blueprint", copyBlueprint(t), "-env", "prod")
+	r.expect(t, 2, "prod has drifted")
+	r.expect(t, 2, "~ application/checkout-api  terraform_data.deployment\n")
+	r.expect(t, 2, "    output.replicas: 5 → 12\n")
 }
 
 func TestOldTofuRejected(t *testing.T) {

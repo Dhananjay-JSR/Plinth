@@ -278,19 +278,31 @@ func driftCommand(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
-	code, err := w.tf.Run(w.dir, "plan", "-refresh-only", "-input=false", "-detailed-exitcode")
+	out, code, err := w.tf.Output(w.dir, "plan", "-refresh-only", "-input=false", "-detailed-exitcode", "-no-color", "-out=drift.tfplan")
 	switch {
 	case err != nil:
 		fmt.Fprintln(stderr, err)
 		return 1
 	case code == 0:
-		fmt.Fprintf(stdout, "\n%s is in sync with its state.\n", *env)
+		fmt.Fprintf(stdout, "%s is in sync with its state.\n", *env)
 		return 0
-	case code == 2:
-		fmt.Fprintf(stdout, "\n%s has drifted: real infrastructure differs from its state (see above).\n", *env)
-		return 2
-	default:
-		fmt.Fprintln(stderr, "tofu plan -refresh-only failed")
+	case code != 2:
+		fmt.Fprintf(stderr, "%stofu plan -refresh-only failed\n", out)
 		return 1
 	}
+	planJSON, code, err := w.tf.Output(w.dir, "show", "-json", "drift.tfplan")
+	if err != nil || code != 0 {
+		fmt.Fprintf(stderr, "%stofu show failed\n", errText(err))
+		return 1
+	}
+	report, err := driftReport(planJSON)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
+	for _, entry := range report {
+		fmt.Fprintln(stdout, entry)
+	}
+	fmt.Fprintf(stdout, "%s has drifted: real infrastructure differs from its state.\n", *env)
+	return 2
 }

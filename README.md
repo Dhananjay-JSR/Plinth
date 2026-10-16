@@ -176,11 +176,16 @@ If `prod.yaml`, an instance or a module changed in between, `apply` refuses and
 asks you to plan again.
 
 **Catch changes made outside Plinth.** `plinth drift` compares real
-infrastructure with state without changing anything, and exits 2 if they differ:
+infrastructure with state without changing anything, and exits 2 if they differ.
+Each change is listed under the resource's own address, and values OpenTofu
+marks sensitive are never printed:
 
 ```console
 $ plinth drift -env prod
-prod is in sync with its state.
+~ application/checkout-api  terraform_data.deployment
+    output.replicas: 5 → 12
+- config_file/app-settings  local_file.this: deleted outside Plinth
+prod has drifted: real infrastructure differs from its state.
 ```
 
 **Take it with you.** `plinth render -env prod -out ./prod-tofu` writes the same
