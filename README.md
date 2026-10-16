@@ -224,17 +224,19 @@ or remote (`DOCKER_HOST=ssh://user@host`), and uses ports 18081 and 18082 on
 ### Start your own
 
 ```bash
-plinth init shop                                         # an empty blueprint
-plinth module init catalog/modules/cache/redis/1.0       # a module that validates and applies as generated
-plinth add -blueprint shop -module redis/1.0 cache/sessions
+plinth init shop                         # an empty blueprint; it looks for modules in ../catalog
+plinth module init cache/redis/1.0       # catalog/modules/cache/redis/1.0/, validates and applies as generated
+cd shop
+plinth add cache/redis/1.0 sessions      # cache/instances/sessions.json
 ```
 
-`plinth add` reads the module's contract: it fills in each required setting it
-can, connects each input to the one resource that provides it, and lists what
-is left for you:
+A module is always named `<kind>/<flavor>/<version>`, the same in every command
+and error. `plinth add` reads that module's contract: it fills in each required
+setting it can, connects each input to the one resource that provides it, and
+lists what is left for you:
 
 ```console
-$ plinth add -module sim/1.0 application/admin
+$ plinth add application/sim/1.0 admin
 created application/instances/admin.json
   inputs.kubernetes_details connected to kubernetes_cluster/main
   fill in: spec.image (string)
@@ -255,8 +257,8 @@ None of these commands ever overwrite an existing file.
 | `plinth drift -env <name>` | Report changes made outside Plinth; exit 2 if any |
 | `plinth render -env <name> -out <dir>` | Write the OpenTofu workspace to an empty folder (export) |
 | `plinth init [-example sim\|docker] [dir]` | Start a blueprint, or write a runnable sample project |
-| `plinth add -module <flavor>/<version> <kind>/<name>` | Create a resource instance, pre-filled from its module |
-| `plinth module init <dir>` | Create a module; kind, flavor and version come from a `modules/<kind>/<flavor>/<version>` path or flags |
+| `plinth add <kind>/<flavor>/<version> <name>` | Create a resource instance, pre-filled from its module |
+| `plinth module init <kind>/<flavor>/<version>` | Create a module in `catalog/modules/` (`-catalog <dir>` to choose) |
 | `plinth module validate <dir>` | Check a module's contract and OpenTofu code |
 | `-blueprint <dir>` | Blueprint location (default: current directory) |
 | `-auto-approve` | Skip the confirmation on `apply` and `destroy` |

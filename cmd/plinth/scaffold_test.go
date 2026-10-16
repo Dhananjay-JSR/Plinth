@@ -19,25 +19,30 @@ func TestModuleInit(t *testing.T) {
 	if _, err := exec.LookPath("tofu"); err != nil {
 		t.Skip("tofu not on PATH")
 	}
-	root := t.TempDir()
-	dir := filepath.Join(root, "catalog/modules/cache/redis_docker/1.0")
-	plinth("", "module", "init", dir).expect(t, 0, "created "+filepath.Join(dir, "module.yaml"))
-	plinth("", "module", "validate", dir).expect(t, 0, "cache/redis_docker/1.0: module valid")
+	cat := filepath.Join(t.TempDir(), "catalog")
+	dir := filepath.Join(cat, "modules/cache/redis/1.0")
+	plinth("", "module", "init", "-catalog", cat, "cache/redis/1.0").expect(t, 0, "created "+filepath.Join(dir, "module.yaml"))
+	plinth("", "module", "validate", dir).expect(t, 0, "cache/redis/1.0: module valid")
 	if out, err := exec.Command("tofu", "fmt", "-check", dir).CombinedOutput(); err != nil {
 		t.Errorf("generated main.tf is not tofu fmt-clean: %s", out)
 	}
-	plinth("", "module", "init", dir).expect(t, 1, "refusing to overwrite")
+	plinth("", "module", "init", "-catalog", cat, "cache/redis/1.0").expect(t, 1, "refusing to overwrite")
 
-	elsewhere := filepath.Join(root, "scratch")
-	plinth("", "module", "init", elsewhere).expect(t, 2, "set -kind, -flavor and -version")
-	plinth("", "module", "init", "-kind", "queue", "-flavor", "sqs", "-version", "2.0", elsewhere).expect(t, 0, "created")
-	plinth("", "module", "validate", elsewhere).expect(t, 0, "queue/sqs/2.0: module valid")
-	plinth("", "module", "init", "-kind", "Bad", "-flavor", "x", "-version", "1", filepath.Join(root, "bad")).expect(t, 1, "lower_snake_case")
+	for id, want := range map[string]string{
+		"cache/redis":       "is not a module <kind>/<flavor>/<version>",
+		"Cache/redis/1.0":   "kind \"Cache\" must be lower_snake_case",
+		"cache/Redis/1.0":   "flavor \"Redis\" must be lower_snake_case",
+		"cache/redis/../x":  "is not a module",
+		"cache/redis/1.0/x": "is not a module",
+	} {
+		plinth("", "module", "init", "-catalog", cat, id).expect(t, 2, want)
+	}
 }
 
 func TestAdd(t *testing.T) {
 	bp := copyBlueprint(t)
-	r := plinth("", "add", "-blueprint", bp, "-module", "fake/1.0", "application/admin")
+	r := plinth("", "add", "-blueprint", bp, "application/fake/1.0", "admin")
+	r.expect(t, 0, "created "+filepath.Join(bp, "application/instances/admin.json"))
 	r.expect(t, 0, "inputs.kubernetes_details connected to kubernetes_cluster/default")
 	r.expect(t, 0, "inputs.cache is optional (core/redis); left unconnected")
 	r.expect(t, 0, "fill in: spec.image (string)")
@@ -57,15 +62,16 @@ func TestAdd(t *testing.T) {
 	write(t, filepath.Join(bp, "application/instances/admin.json"), strings.Replace(strings.Replace(string(got), `"image": ""`, `"image": "admin:1.0"`, 1), `"port": 0`, `"port": 3000`, 1))
 	plinth("", "validate", "-blueprint", bp, "-env", "dev").expect(t, 0, "dev: 3 resource instances valid")
 
-	plinth("", "add", "-blueprint", bp, "-module", "fake/1.0", "application/admin").expect(t, 1, "refusing to overwrite")
+	plinth("", "add", "-blueprint", bp, "application/fake/1.0", "admin").expect(t, 1, "refusing to overwrite")
 
 	// Two clusters: Plinth can't guess, so it says which to choose from.
 	write(t, filepath.Join(bp, "kubernetes_cluster/instances/backup.json"), `{"kind":"kubernetes_cluster","flavor":"fake","version":"1.0","spec":{"cluster_name":"b"}}`)
-	plinth("", "add", "-blueprint", bp, "-module", "fake/1.0", "application/other").expect(t, 0, "choose one of [kubernetes_cluster/backup, kubernetes_cluster/default]")
+	plinth("", "add", "-blueprint", bp, "application/fake/1.0", "other").expect(t, 0, "choose one of [kubernetes_cluster/backup, kubernetes_cluster/default]")
 
-	plinth("", "add", "-blueprint", bp, "-module", "fake/9.9", "application/x").expect(t, 1, "module application/fake/9.9 not found")
-	plinth("", "add", "-blueprint", bp, "-module", "fake/1.0", "Application/x").expect(t, 2, "is not a resource instance address")
-	plinth("", "add", "-blueprint", bp, "application/x").expect(t, 2, "usage:")
+	plinth("", "add", "-blueprint", bp, "application/fake/9.9", "x").expect(t, 1, "module application/fake/9.9 not found")
+	plinth("", "add", "-blueprint", bp, "application/fake", "x").expect(t, 2, "is not a module <kind>/<flavor>/<version>")
+	plinth("", "add", "-blueprint", bp, "application/fake/1.0", "Bad_Name").expect(t, 2, "name \"Bad_Name\" must match")
+	plinth("", "add", "-blueprint", bp, "application/fake/1.0").expect(t, 2, "usage:")
 }
 
 func TestInitExamples(t *testing.T) {
