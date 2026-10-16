@@ -1,0 +1,6 @@
+overrides:
+  application/whoami:
+    spec:
+      host_port: 18082
+      env:
+        WHOAMI_NAME: whoami-prod

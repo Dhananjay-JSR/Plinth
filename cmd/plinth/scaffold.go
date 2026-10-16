@@ -18,6 +18,7 @@ import (
 func initCommand(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("init", flag.ContinueOnError)
 	fs.SetOutput(stderr)
+	example := fs.String("example", "", "write a runnable sample project: "+strings.Join(scaffold.Examples(), " or "))
 	if err := fs.Parse(args); err != nil || fs.NArg() > 1 {
 		fmt.Fprint(stderr, usage)
 		return 2
@@ -26,12 +27,27 @@ func initCommand(args []string, stdout, stderr io.Writer) int {
 	if fs.NArg() == 1 {
 		dir = fs.Arg(0)
 	}
-	created, err := scaffold.Write(dir, scaffold.Blueprint())
+	files := scaffold.Blueprint()
+	if *example != "" {
+		var err error
+		if files, err = scaffold.Example(*example); err != nil {
+			fmt.Fprintln(stderr, err)
+			return 2
+		}
+	}
+	created, err := scaffold.Write(dir, files)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
 	printCreated(stdout, dir, created)
+	if *example != "" {
+		fmt.Fprintf(stdout, "\nNext:\n  cd %s\n  plinth apply -env dev\n", dir)
+		if *example == "docker" {
+			fmt.Fprintln(stdout, "  (needs Docker; set DOCKER_HOST=ssh://user@host to use a remote one. Uses 127.0.0.1:18081 and :18082.)")
+		}
+		return 0
+	}
 	fmt.Fprintf(stdout, "\nNext: point .plinth/project.yaml at your catalog, then add a resource instance:\n  plinth add -blueprint %s -module <flavor>/<version> <kind>/<name>\n", dir)
 	return 0
 }

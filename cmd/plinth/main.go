@@ -22,7 +22,7 @@ const usage = `usage:
   plinth apply    [-blueprint DIR] -env NAME [-plan FILE] [-auto-approve]
   plinth destroy  [-blueprint DIR] -env NAME [-auto-approve]
   plinth drift    [-blueprint DIR] -env NAME
-  plinth init     [DIR]
+  plinth init     [-example sim|docker] [DIR]
   plinth add      [-blueprint DIR] -module FLAVOR/VERSION KIND/NAME
   plinth module init [-kind K -flavor F -version V] DIR
   plinth module validate DIR

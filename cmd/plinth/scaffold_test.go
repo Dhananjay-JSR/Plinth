@@ -67,3 +67,29 @@ func TestAdd(t *testing.T) {
 	plinth("", "add", "-blueprint", bp, "-module", "fake/1.0", "Application/x").expect(t, 2, "is not a resource instance address")
 	plinth("", "add", "-blueprint", bp, "application/x").expect(t, 2, "usage:")
 }
+
+func TestInitExamples(t *testing.T) {
+	if _, err := exec.LookPath("tofu"); err != nil {
+		t.Skip("tofu not on PATH")
+	}
+	for _, name := range []string{"sim", "docker"} {
+		dir := filepath.Join(t.TempDir(), name)
+		plinth("", "init", "-example", name, dir).expect(t, 0, "plinth apply -env dev")
+		for _, env := range []string{"dev", "prod"} {
+			plinth("", "validate", "-blueprint", dir, "-env", env).expect(t, 0, env+": 2 resource instances valid")
+		}
+		if out, err := exec.Command("tofu", "fmt", "-check", "-recursive", dir).CombinedOutput(); err != nil {
+			t.Errorf("%s example is not tofu fmt-clean: %s", name, out)
+		}
+	}
+
+	// sim needs nothing but OpenTofu, so it runs end to end here.
+	dir := filepath.Join(t.TempDir(), "sim")
+	plinth("", "init", "-example", "sim", dir).expect(t, 0, "created")
+	env := []string{"-blueprint", dir, "-env", "prod"}
+	plinth("", append([]string{"apply", "-auto-approve"}, env...)...).expect(t, 0, "Resources: 2 added")
+	plinth("", append([]string{"drift"}, env...)...).expect(t, 0, "prod is in sync with its state.")
+	plinth("", append([]string{"destroy", "-auto-approve"}, env...)...).expect(t, 0, "2 destroyed")
+
+	plinth("", "init", "-example", "nope", t.TempDir()).expect(t, 2, "unknown example \"nope\"; choose one of: docker, sim")
+}

@@ -1,0 +1,21 @@
+kind: application
+flavor: docker
+version: "1.0"
+
+spec:
+  type: object
+  required: [image, container_port, host_port]
+  additionalProperties: false
+  properties:
+    image:          { type: string }
+    container_port: { type: integer, minimum: 1, maximum: 65535 }
+    host_port:      { type: integer, minimum: 1024, maximum: 65535 }
+    env:
+      type: object
+      additionalProperties: { type: string }
+
+inputs:
+  network: { type: core/docker_network }
+
+outputs:
+  default: { type: core/application }

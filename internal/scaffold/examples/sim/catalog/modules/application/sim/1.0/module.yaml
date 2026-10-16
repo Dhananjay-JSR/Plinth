@@ -1,0 +1,21 @@
+kind: application
+flavor: sim
+version: "1.0"
+
+spec:
+  type: object
+  required: [image, port]
+  additionalProperties: false
+  properties:
+    image: { type: string }
+    port: { type: integer, minimum: 1, maximum: 65535 }
+    replicas: { type: integer, minimum: 1 }
+    env:
+      type: object
+      additionalProperties: { type: string }
+
+inputs:
+  kubernetes_details: { type: core/kubernetes_cluster }
+
+outputs:
+  default: { type: core/application }

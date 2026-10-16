@@ -1,0 +1,11 @@
+kind: network
+flavor: docker
+version: "1.0"
+
+spec:
+  type: object
+  additionalProperties: false
+  properties: {}
+
+outputs:
+  default: { type: core/docker_network }

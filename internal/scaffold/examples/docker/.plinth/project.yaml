@@ -1,0 +1,3 @@
+# The modules ship inside this project, in ./catalog.
+catalogs:
+  core: catalog

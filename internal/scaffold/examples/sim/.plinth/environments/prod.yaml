@@ -1,0 +1,9 @@
+overrides:
+  kubernetes_cluster/main:
+    spec:
+      node_count: 6
+  application/checkout-api:
+    spec:
+      replicas: 8
+      env:
+        LOG_LEVEL: warn

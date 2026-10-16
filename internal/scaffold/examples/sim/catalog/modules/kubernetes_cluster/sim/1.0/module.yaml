@@ -1,0 +1,14 @@
+kind: kubernetes_cluster
+flavor: sim
+version: "1.0"
+
+spec:
+  type: object
+  required: [cluster_name]
+  additionalProperties: false
+  properties:
+    cluster_name: { type: string }
+    node_count: { type: integer, minimum: 1, default: 2 }
+
+outputs:
+  default: { type: core/kubernetes_cluster }

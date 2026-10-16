@@ -1,0 +1,17 @@
+{
+  "kind": "application",
+  "flavor": "docker",
+  "version": "1.0",
+  "inputs": {
+    "network": { "kind": "network", "name": "main" }
+  },
+  "spec": {
+    "image": "traefik/whoami:v1.10",
+    "container_port": 80,
+    "host_port": 18081,
+    "env": {
+      "WHOAMI_NAME": "whoami-dev",
+      "NETWORK": "${network.main.out.default.attributes.name}"
+    }
+  }
+}
