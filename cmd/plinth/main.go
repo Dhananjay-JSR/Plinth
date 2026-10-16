@@ -23,6 +23,7 @@ const usage = `usage:
   plinth destroy  [-blueprint DIR] -env NAME [-auto-approve]
   plinth drift    [-blueprint DIR] -env NAME
   plinth init     [DIR]
+  plinth module init [-kind K -flavor F -version V] DIR
   plinth module validate DIR
   plinth --version
 `
@@ -70,6 +71,9 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	case "module":
 		if len(args) == 3 && args[1] == "validate" {
 			return moduleValidate(args[2], stdout, stderr)
+		}
+		if len(args) >= 2 && args[1] == "init" {
+			return moduleInit(args[2:], stdout, stderr)
 		}
 	}
 	fmt.Fprint(stderr, usage)

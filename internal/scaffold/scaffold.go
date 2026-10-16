@@ -67,3 +67,50 @@ overrides: {}
 		".plinth/.gitignore": Gitignore,
 	}
 }
+
+// Module is a module that validates and applies as generated: a terraform_data
+// placeholder for the author to replace with real resources.
+func Module(kind, flavor, version string) map[string]string {
+	return map[string]string{
+		"module.yaml": fmt.Sprintf(`kind: %s
+flavor: %s
+version: "%s"
+
+# JSON Schema for what a resource instance may set in its "spec".
+spec:
+  type: object
+  required: [message]
+  additionalProperties: false
+  properties:
+    message: { type: string }
+
+# Other resource instances this module needs, matched by output type:
+# inputs:
+#   network: { type: core/network }
+
+# What this module provides. Other modules' inputs link to it by this type.
+outputs:
+  default: { type: core/%s }
+`, kind, flavor, version, kind),
+		"main.tf": `# Replace terraform_data with the real resources this module manages.
+# Plinth passes every module four variables (no variables.tf needed):
+#   var.instance       kind, flavor, version and the effective spec
+#   var.instance_name  this resource instance's name
+#   var.environment    the environment, e.g. { name = "dev" }
+#   var.inputs         connected inputs' outputs, by input name
+resource "terraform_data" "this" {
+  input = {
+    message     = var.instance.spec.message
+    environment = var.environment.name
+  }
+}
+
+output "default" {
+  value = {
+    attributes = terraform_data.this.output # facts other modules may read
+    interfaces = {}                         # how to connect, e.g. { http = { host, port } }
+  }
+}
+`,
+	}
+}
