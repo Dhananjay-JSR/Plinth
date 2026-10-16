@@ -7,14 +7,17 @@ application team then asks for what it needs (a cluster, a database, a
 deployment) in a short JSON file, without writing HCL, wiring module outputs by
 hand, or keeping per-environment tfvars in sync.
 
-`plinth` checks the request, applies each environment's differences, and
-generates an ordinary OpenTofu workspace. OpenTofu does the rest, against your
+`plinth` checks the request, applies each environment's differences,
+generates an ordinary OpenTofu workspace, and runs OpenTofu on it against your
 cloud and your state.
 
 ```console
-$ plinth render -env prod -out build/prod
-prod: rendered 2 resource instances to build/prod
-$ tofu -chdir=build/prod apply
+$ plinth apply -env prod
+...
+Plan: 2 to add, 0 to change, 0 to destroy.
+
+Apply these changes to prod? Only 'yes' will be accepted: yes
+Apply complete! Resources: 2 added, 0 changed, 0 destroyed.
 ```
 
 ```mermaid
@@ -23,8 +26,8 @@ flowchart LR
     INST["App team<br/>application/instances/checkout-api.json"]
     ENV["Per environment<br/>.plinth/environments/prod.yaml"]
     PL["plinth<br/>validate · merge · wire · generate"]
-    OUT["Plain OpenTofu<br/>main.tf + modules + manifest"]
-    TOFU["tofu plan / apply<br/>your cloud, your state"]
+    OUT["Plain OpenTofu<br/>main.tf + modules + backend"]
+    TOFU["plinth plan / apply<br/>runs OpenTofu: your cloud, your state"]
     MOD --> PL
     INST --> PL
     ENV --> PL
@@ -45,8 +48,8 @@ source:
 go install github.com/Dhananjay-JSR/Plinth/cmd/plinth@latest
 ```
 
-`plinth` generates OpenTofu, so you also need
-[OpenTofu](https://opentofu.org/docs/intro/install/) to apply what it renders.
+`plinth` runs [OpenTofu](https://opentofu.org/docs/intro/install/) 1.6 or newer,
+found on your `PATH`.
 
 ## Use
 
@@ -73,8 +76,10 @@ outputs:
   default: { type: core/application }                    # provides an app
 ```
 
-Next to it is ordinary OpenTofu (`main.tf`, `variables.tf`) that reads
-`var.instance.spec`, `var.inputs` and `var.environment`.
+Next to it is ordinary OpenTofu (`main.tf`) that reads `var.instance.spec`,
+`var.inputs` and `var.environment`. Plinth declares those variables for every
+module, so there is no `variables.tf` to write. Check a module on its own with
+`plinth module validate <dir>`.
 
 **The checkout team asks for a deployment.** One file per resource, named by
 where it lives: this one is `application/checkout-api`.
@@ -112,16 +117,17 @@ overrides:
       replicas: 5
 ```
 
-**Render it:**
+**Apply it:**
 
 ```console
 $ plinth validate -env prod
 prod: 2 resource instances valid
-$ plinth render -env prod -out build/prod
-prod: rendered 2 resource instances to build/prod
+$ plinth apply -env prod
 ```
 
-`build/prod/main.tf` is the wiring you would otherwise write by hand:
+`plinth apply` renders the environment into `.plinth/build/prod/`, runs
+`tofu init` and `tofu plan`, and applies exactly the plan it showed you once you
+type `yes`. Its `main.tf` is the wiring you would otherwise write by hand:
 
 ```hcl
 module "application__checkout-api" {
@@ -144,14 +150,42 @@ module "application__checkout-api" {
 }
 ```
 
-The modules it uses are copied into `build/prod/modules/`, and
-`.plinth/manifest.json` records a content digest for each, so the same inputs
-always render the same bytes. It is a self-contained OpenTofu project:
+The modules it uses are copied alongside, and `.plinth/manifest.json` records
+a content digest for each, so the same inputs always render the same bytes.
+
+**State stays where you say.** By default it is a local file,
+`.plinth/state/prod.tfstate`, kept out of git. To use a shared backend, name it
+in the environment and Plinth writes the `backend` block:
+
+```yaml
+# .plinth/environments/prod.yaml
+state:
+  backend: s3
+  config: { bucket: shopkart-tfstate, key: prod.tfstate, region: ap-south-1 }
+```
+
+**Review now, apply later.** A saved plan is only applied if nothing changed
+since it was made:
 
 ```console
-$ tofu -chdir=build/prod init
-$ tofu -chdir=build/prod apply
+$ plinth plan -env prod -out prod.plan
+$ plinth apply -env prod -plan prod.plan     # after review
 ```
+
+If `prod.yaml`, an instance or a module changed in between, `apply` refuses and
+asks you to plan again.
+
+**Catch changes made outside Plinth.** `plinth drift` compares real
+infrastructure with state without changing anything, and exits 2 if they differ:
+
+```console
+$ plinth drift -env prod
+prod is in sync with its state.
+```
+
+**Take it with you.** `plinth render -env prod -out ./prod-tofu` writes the same
+workspace to a folder of your choice: a plain OpenTofu project that runs without
+Plinth.
 
 **Mistakes stop before OpenTofu runs.** Disable the cluster in prod and pass
 the port as a string, and every problem is reported at once:
@@ -169,8 +203,8 @@ built-in `terraform_data`, so it applies with no cloud account and no cost:
 
 ```bash
 git clone https://github.com/Dhananjay-JSR/Plinth.git && cd Plinth
-plinth render -blueprint testdata/blueprints/checkout -env prod -out /tmp/checkout-prod
-tofu -chdir=/tmp/checkout-prod init && tofu -chdir=/tmp/checkout-prod apply
+plinth apply   -blueprint testdata/blueprints/checkout -env prod
+plinth destroy -blueprint testdata/blueprints/checkout -env prod   # type "prod" to confirm
 ```
 
 ## Commands
@@ -178,8 +212,15 @@ tofu -chdir=/tmp/checkout-prod init && tofu -chdir=/tmp/checkout-prod apply
 | Command | Does |
 | --- | --- |
 | `plinth validate -env <name>` | Check the blueprint for an environment; exit 1 on any problem |
-| `plinth render -env <name> -out <dir>` | Write the OpenTofu workspace for an environment into an empty directory |
+| `plinth plan -env <name> [-out <file>]` | Show what would change; `-out` saves the plan for later |
+| `plinth apply -env <name>` | Plan, confirm with `yes`, apply that plan |
+| `plinth apply -env <name> -plan <file>` | Apply a saved plan, refusing if anything changed since |
+| `plinth destroy -env <name>` | Destroy everything in the environment; confirm by typing its name |
+| `plinth drift -env <name>` | Report changes made outside Plinth; exit 2 if any |
+| `plinth render -env <name> -out <dir>` | Write the OpenTofu workspace to an empty folder (export) |
+| `plinth module validate <dir>` | Check a module's contract and OpenTofu code |
 | `-blueprint <dir>` | Blueprint location (default: current directory) |
+| `-auto-approve` | Skip the confirmation on `apply` and `destroy` |
 | `plinth --version` | Print the version |
 
 ## What plinth checks
@@ -202,13 +243,14 @@ shopkart/                                   # a blueprint
 ├── application/instances/checkout-api.json
 └── .plinth/
     ├── project.yaml                        # catalogs:  core: ../catalog
-    └── environments/
-        ├── dev.yaml
-        └── prod.yaml
+    ├── environments/
+    │   ├── dev.yaml
+    │   └── prod.yaml
+    ├── build/                              # generated workspaces (git-ignored)
+    └── state/                              # default local state (git-ignored)
 
 catalog/modules/<kind>/<flavor>/<version>/  # a module
 ├── module.yaml
-├── variables.tf
 └── main.tf
 ```
 
@@ -216,7 +258,7 @@ Environment overrides merge into the blueprint: objects merge key by key,
 while lists, plain values and `null` replace. An override can also switch a
 resource off with `disabled: true`. It can never add one.
 
-Every module receives the same four variables:
+Every module receives the same four variables, declared by Plinth:
 
 | Variable | Holds |
 | --- | --- |
