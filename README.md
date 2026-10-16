@@ -1,116 +1,89 @@
 # Plinth
 
-**Infrastructure abstraction and governed releases on top of OpenTofu.**
+**Describe infrastructure in a few lines of JSON. Get plain OpenTofu out.**
 
-Platform engineers publish reusable infrastructure **modules**. Application
-developers compose them into a **blueprint** by writing small JSON files, with no
-HCL, providers or state files to manage. Plinth specializes the blueprint for each
-**environment**, validates everything up front, and generates a plain, deterministic
-OpenTofu workspace.
+A platform team writes infrastructure once, as reusable modules. Every
+application team then asks for what it needs (a cluster, a database, a
+deployment) in a short JSON file, without writing HCL, wiring module outputs by
+hand, or keeping per-environment tfvars in sync.
 
-OpenTofu still does the real work against your cloud, and your state stays in your
-own backend. You can always take the generated OpenTofu and run it without Plinth.
+`plinth` checks the request, applies each environment's differences, and
+generates an ordinary OpenTofu workspace. OpenTofu does the rest, against your
+cloud and your state.
 
-> **Status: Phase 0 (engine proof).** The core engine works end to end on local
-> catalogs: validate, merge, wire, generate and apply with OpenTofu. There is no
-> server, UI, or release workflow yet. See [Status](#status).
-
----
-
-## Why
-
-Without Plinth, every team that needs infrastructure writes or copies Terraform:
-wiring module outputs into inputs by hand, keeping `dev`/`staging`/`prod` tfvars in
-sync, and finding mistakes only when `apply` fails.
-
-With Plinth:
-
-| | Without Plinth | With Plinth |
-| --- | --- | --- |
-| Who writes OpenTofu | Every team, for every service | The platform team, once per capability |
-| A new service | A few hundred lines of HCL | One ~15-line JSON file |
-| Per-environment differences | Full copies of tfvars | Sparse overrides of only what changes |
-| Wiring module A into module B | Hand-written `module.a.output` lines | Generated from typed inputs and outputs |
-| A wrong wire | Found at `apply`, maybe never | Rejected before any OpenTofu runs |
-
----
-
-## How it works
+```console
+$ plinth render -env prod -out build/prod
+prod: rendered 2 resource instances to build/prod
+$ tofu -chdir=build/prod apply
+```
 
 ```mermaid
 flowchart LR
-    subgraph Platform team
-        MOD["Module<br/>module.yaml + .tf files"]
-    end
-    subgraph Developers
-        INST["Resource instances<br/>&lt;kind&gt;/instances/&lt;name&gt;.json"]
-        ENV["Environment overrides<br/>.plinth/environments/prod.yaml"]
-    end
-    ENG["plinth<br/>resolve · merge · validate · wire · generate"]
-    WS["Workspace bundle<br/>main.tf + modules/ + manifest"]
-    TOFU["OpenTofu<br/>plan · apply"]
-    MOD --> ENG
-    INST --> ENG
-    ENV --> ENG
-    ENG --> WS --> TOFU
+    MOD["Platform team<br/>modules: module.yaml + .tf"]
+    INST["App team<br/>application/instances/checkout-api.json"]
+    ENV["Per environment<br/>.plinth/environments/prod.yaml"]
+    PL["plinth<br/>validate · merge · wire · generate"]
+    OUT["Plain OpenTofu<br/>main.tf + modules + manifest"]
+    TOFU["tofu plan / apply<br/>your cloud, your state"]
+    MOD --> PL
+    INST --> PL
+    ENV --> PL
+    PL --> OUT --> TOFU
 ```
 
-### Core concepts
-
-| Concept | What it is |
-| --- | --- |
-| **Catalog** | A versioned folder of modules owned by a platform team. |
-| **Module** | A reusable capability: OpenTofu code plus a contract (`module.yaml`), identified by **kind** / **flavor** / **version**, e.g. `kubernetes_cluster/aws_eks/1.0`. |
-| **Blueprint** | The set of resource instances and their connections, shared by all environments. |
-| **Resource instance** | One configured use of a module, addressed `<kind>/<name>`, e.g. `application/checkout-api`. |
-| **Input / Output** | Modules declare typed inputs and outputs. An input connects only to an output of the same **output type**, written `<catalog>/<name>`, e.g. `core/kubernetes_cluster`. |
-| **Environment** | Sparse overrides on top of the blueprint: change a spec value, or disable an instance. Environments never add instances. |
-| **Workspace bundle** | The generated OpenTofu root, copies of every module it uses, and a manifest of module digests. The same inputs always produce byte-identical output. |
-
----
-
-## Quickstart
-
-Requirements: [mise](https://mise.jdx.dev) (installs the pinned Go and OpenTofu versions).
+## Install
 
 ```bash
-git clone https://github.com/Dhananjay-JSR/Plinth.git
-cd Plinth
-mise install                       # Go and OpenTofu, versions from mise.toml
-
-# Validate the example blueprint for the prod environment
-mise exec -- go run ./cmd/plinth validate -blueprint testdata/blueprints/checkout -env prod
-
-# Generate the OpenTofu workspace bundle
-mise exec -- go run ./cmd/plinth render -blueprint testdata/blueprints/checkout -env prod -out /tmp/checkout-prod
-
-# Apply it with plain OpenTofu (the example modules use terraform_data: no cloud, no cost)
-mise exec -- tofu -chdir=/tmp/checkout-prod init
-mise exec -- tofu -chdir=/tmp/checkout-prod apply
+curl -fsSL https://raw.githubusercontent.com/Dhananjay-JSR/Plinth/main/install.sh | sh
 ```
 
----
+The installer downloads the release binary for your platform (macOS or Linux,
+amd64 or arm64) and verifies it against the published `SHA256SUMS`. Or from
+source:
 
-## A blueprint on disk
-
-```text
-checkout/
-├── blueprint.yaml                          # marks the blueprint root
-├── kubernetes_cluster/instances/default.json
-├── application/instances/checkout-api.json
-└── .plinth/
-    ├── project.yaml                        # which catalogs this project uses
-    └── environments/
-        ├── dev.yaml
-        └── prod.yaml
+```bash
+go install github.com/Dhananjay-JSR/Plinth/cmd/plinth@latest
 ```
 
-**A resource instance** (`application/instances/checkout-api.json`):
+`plinth` generates OpenTofu, so you also need
+[OpenTofu](https://opentofu.org/docs/intro/install/) to apply what it renders.
+
+## Use
+
+Take a checkout service that needs a Kubernetes cluster.
+
+**The platform team writes a module once.** Its `module.yaml` is the contract:
+what a team may configure, what the module needs, and what it provides.
+
+```yaml
+# catalog/modules/application/k8s_deployment/1.0/module.yaml
+kind: application
+flavor: k8s_deployment
+version: "1.0"
+spec:                                    # JSON Schema for what teams may set
+  type: object
+  required: [image, port]
+  properties:
+    image:    { type: string }
+    port:     { type: integer, minimum: 1, maximum: 65535 }
+    replicas: { type: integer, minimum: 1 }
+inputs:
+  kubernetes_details: { type: core/kubernetes_cluster }   # needs a cluster
+outputs:
+  default: { type: core/application }                    # provides an app
+```
+
+Next to it is ordinary OpenTofu (`main.tf`, `variables.tf`) that reads
+`var.instance.spec`, `var.inputs` and `var.environment`.
+
+**The checkout team asks for a deployment.** One file per resource, named by
+where it lives: this one is `application/checkout-api`.
 
 ```json
+// application/instances/checkout-api.json
 {
   "kind": "application",
-  "flavor": "fake",
+  "flavor": "k8s_deployment",
   "version": "1.0",
   "inputs": {
     "kubernetes_details": { "kind": "kubernetes_cluster", "name": "default" }
@@ -126,130 +99,138 @@ checkout/
 }
 ```
 
-- `inputs` connects the `kubernetes_details` input to the cluster instance. Plinth
-  checks that the cluster produces the output type the input needs.
-- `${<kind>.<name>.out.<output>.<path>}` references another instance's output from
-  inside a spec.
+`inputs` plugs in the cluster as a whole. Plinth checks it really is a cluster.
+`${...}` copies a single value from another resource's output into a setting.
 
-**An environment** (`.plinth/environments/prod.yaml`):
+**Production only says what is different:**
 
 ```yaml
+# .plinth/environments/prod.yaml
 overrides:
   application/checkout-api:
     spec:
       replicas: 5
-  # network/nat:
-  #   disabled: true
 ```
 
-Overrides merge recursively: objects merge, while arrays, scalars and `null` replace.
+**Render it:**
 
-**The project** (`.plinth/project.yaml`):
-
-```yaml
-catalogs:
-  core: ../../catalogs/core     # catalog name → local folder
+```console
+$ plinth validate -env prod
+prod: 2 resource instances valid
+$ plinth render -env prod -out build/prod
+prod: rendered 2 resource instances to build/prod
 ```
 
----
+`build/prod/main.tf` is the wiring you would otherwise write by hand:
 
-## Writing a module
+```hcl
+module "application__checkout-api" {
+  source        = "./modules/application/k8s_deployment/1.0"
+  instance_name = "checkout-api"
+  instance = {
+    "spec" = {
+      "env" = {
+        "CLUSTER" = "${module.kubernetes_cluster__default.default.attributes.cluster_name}"
+      }
+      "image"    = "checkout-api:v1.4"
+      "port"     = 8080
+      "replicas" = 5
+    }
+    # ...
+  }
+  inputs = {
+    "kubernetes_details" = module.kubernetes_cluster__default.default
+  }
+}
+```
 
-A module lives in a catalog at `modules/<kind>/<flavor>/<version>/`:
+The modules it uses are copied into `build/prod/modules/`, and
+`.plinth/manifest.json` records a content digest for each, so the same inputs
+always render the same bytes. It is a self-contained OpenTofu project:
+
+```console
+$ tofu -chdir=build/prod init
+$ tofu -chdir=build/prod apply
+```
+
+**Mistakes stop before OpenTofu runs.** Disable the cluster in prod and pass
+the port as a string, and every problem is reported at once:
+
+```console
+$ plinth validate -env prod
+application/checkout-api: depends on kubernetes_cluster/default, which is disabled in environment prod
+application/checkout-api: spec/port: got string, want integer
+```
+
+### Try it
+
+The repository ships this example with simulated modules that use OpenTofu's
+built-in `terraform_data`, so it applies with no cloud account and no cost:
+
+```bash
+git clone https://github.com/Dhananjay-JSR/Plinth.git && cd Plinth
+plinth render -blueprint testdata/blueprints/checkout -env prod -out /tmp/checkout-prod
+tofu -chdir=/tmp/checkout-prod init && tofu -chdir=/tmp/checkout-prod apply
+```
+
+## Commands
+
+| Command | Does |
+| --- | --- |
+| `plinth validate -env <name>` | Check the blueprint for an environment; exit 1 on any problem |
+| `plinth render -env <name> -out <dir>` | Write the OpenTofu workspace for an environment into an empty directory |
+| `-blueprint <dir>` | Blueprint location (default: current directory) |
+| `plinth --version` | Print the version |
+
+## What plinth checks
+
+Before writing any OpenTofu, for the chosen environment:
+
+- each resource's `spec` matches its module's JSON Schema
+- every required input is connected, and only to an output of the same type
+- every `${...}` reference points at an existing, enabled resource and a declared output
+- nothing depends on a resource disabled in this environment
+- the environment only overrides resources that exist
+- there are no dependency cycles
+
+## Layout
 
 ```text
-modules/application/fake/1.0/
-├── module.yaml      # the contract
-├── variables.tf     # instance, instance_name, environment, inputs
-└── main.tf          # ordinary OpenTofu
+shopkart/                                   # a blueprint
+├── blueprint.yaml
+├── kubernetes_cluster/instances/default.json
+├── application/instances/checkout-api.json
+└── .plinth/
+    ├── project.yaml                        # catalogs:  core: ../catalog
+    └── environments/
+        ├── dev.yaml
+        └── prod.yaml
+
+catalog/modules/<kind>/<flavor>/<version>/  # a module
+├── module.yaml
+├── variables.tf
+└── main.tf
 ```
 
-```yaml
-# module.yaml
-kind: application
-flavor: fake
-version: "1.0"
-spec:                              # JSON Schema; validates each instance's spec
-  type: object
-  required: [image, port]
-  properties:
-    image: { type: string }
-    port:  { type: integer, minimum: 1, maximum: 65535 }
-inputs:
-  kubernetes_details: { type: core/kubernetes_cluster }
-  cache:              { type: core/redis, optional: true }   # null when not connected
-outputs:
-  default: { type: core/application }
-```
+Environment overrides merge into the blueprint: objects merge key by key,
+while lists, plain values and `null` replace. An override can also switch a
+resource off with `disabled: true`. It can never add one.
 
 Every module receives the same four variables:
 
-| Variable | Contains |
+| Variable | Holds |
 | --- | --- |
-| `instance` | `kind`, `flavor`, `version` and the effective `spec` |
-| `instance_name` | The instance's name, e.g. `checkout-api` |
-| `environment` | The environment, currently `{ name }` |
-| `inputs` | The connected producers' outputs, keyed by input name (`null` for unconnected optional inputs) |
-
----
-
-## What Plinth checks before any OpenTofu runs
-
-- The spec matches the module's JSON Schema.
-- Every required input is connected, and only declared inputs are used.
-- Each input is connected to an output of the same output type.
-- References point at existing, enabled instances and declared outputs.
-- No instance depends on one that is disabled in this environment.
-- Environments only override instances that exist in the blueprint.
-- The dependency graph has no cycles.
-
-All problems are reported together, not one at a time.
-
----
-
-## Status
-
-**Works today (Phase 0)**
-
-- [x] Module contracts with JSON Schema spec validation
-- [x] Local catalogs with content digests pinned in the manifest
-- [x] Environment overrides and disabled instances
-- [x] Typed input wiring and output references
-- [x] Deterministic workspace generation
-- [x] `plinth validate` and `plinth render`
-- [x] End-to-end test with real OpenTofu: apply, clean re-plan, in-place environment change
-
-**Not yet**
-
-- [ ] Git-based catalogs and version pinning by ref
-- [ ] Variables, artifacts and secret references
-- [ ] Provider configuration from module outputs, and bootstrap waves
-- [ ] `plinth plan`, `apply`, `destroy` and `export`
-- [ ] Releases, policy gates, approvals and drift detection
-- [ ] Server, UI and runners
-
----
+| `instance` | `kind`, `flavor`, `version` and the merged `spec` |
+| `instance_name` | The resource's name, e.g. `checkout-api` |
+| `environment` | The environment, e.g. `{ name = "prod" }` |
+| `inputs` | Each connected input's producer output, or `null` for an unconnected optional input |
 
 ## Development
 
 ```bash
-mise exec -- go test ./...                          # all tests, including the OpenTofu end-to-end test
-mise exec -- go test ./internal/generate -update    # regenerate golden files after an intended output change
+mise install                                      # Go and OpenTofu at the pinned versions
+mise exec -- go test ./...                        # includes an end-to-end OpenTofu apply
+mise exec -- go test ./internal/generate -update  # refresh golden files after an intended output change
 ```
 
-| Path | Purpose |
-| --- | --- |
-| `cmd/plinth` | CLI |
-| `internal/module` | Module contract parsing and spec validation |
-| `internal/catalog` | Module resolution and content digests |
-| `internal/merge` | Override merge rules |
-| `internal/blueprint` | Loading, input wiring, references, graph checks |
-| `internal/generate` | Workspace bundle generation |
-| `testdata/` | Example catalog, blueprint and golden output |
-
-## Principles
-
-- **Not a new IaC engine.** OpenTofu plans and applies.
-- **No lock-in.** The output is plain OpenTofu, and state lives in your backend.
-- **Not cloud magic.** Provider differences stay explicit in modules.
-- **Safety isn't UI-only.** Every rule is enforced by the engine and tested.
+Releases are cut by pushing a `vX.Y.Z` tag.
