@@ -140,3 +140,41 @@ func TestQuoteEscapesLiterals(t *testing.T) {
 		}
 	}
 }
+
+func TestRenderBackend(t *testing.T) {
+	bp, _ := blueprint.Load(fixture)
+	e, _ := blueprint.LoadEnvironment(fixture, "prod")
+	cfg, err := blueprint.Resolve(bp, e)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := filepath.Join(t.TempDir(), "plain")
+	if err := Render(cfg, out); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(out, "backend.tf")); !os.IsNotExist(err) {
+		t.Errorf("no state declared, but backend.tf exists (err %v)", err)
+	}
+	plain := readTree(t, out)[ManifestFile]
+
+	cfg.State = &blueprint.State{Backend: "s3", Config: map[string]any{"bucket": "shopkart-tfstate", "key": "prod/${x}.tfstate"}}
+	out = filepath.Join(t.TempDir(), "s3")
+	if err := Render(cfg, out); err != nil {
+		t.Fatal(err)
+	}
+	src, err := os.ReadFile(filepath.Join(out, "backend.tf"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, diags := hclparse.NewParser().ParseHCL(src, "backend.tf"); diags.HasErrors() {
+		t.Fatal(diags)
+	}
+	for _, want := range []string{`backend "s3" {`, `bucket = "shopkart-tfstate"`, `key    = "prod/$${x}.tfstate"`} {
+		if !strings.Contains(string(src), want) {
+			t.Errorf("backend.tf missing %q:\n%s", want, src)
+		}
+	}
+	if readTree(t, out)[ManifestFile] == plain {
+		t.Error("declaring a backend did not change the effective configuration digest")
+	}
+}

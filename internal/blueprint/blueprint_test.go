@@ -249,3 +249,17 @@ func TestLoadEnvironmentRejectsPathTraversal(t *testing.T) {
 		t.Error("want error")
 	}
 }
+
+func TestEnvironmentState(t *testing.T) {
+	dir := scenario(t, map[string]string{prodFile: "state:\n  backend: s3\n  config:\n    bucket: b\n    encrypt: true\n"})
+	cfg, err := resolve(t, dir, "prod")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.State == nil || cfg.State.Backend != "s3" || cfg.State.Config["bucket"] != "b" || cfg.State.Config["encrypt"] != true {
+		t.Errorf("state = %+v", cfg.State)
+	}
+	if _, err := LoadEnvironment(scenario(t, map[string]string{prodFile: "state:\n  backend: ../evil\n"}), "prod"); err == nil {
+		t.Error("invalid backend name accepted")
+	}
+}

@@ -64,6 +64,13 @@ type Override struct {
 type Environment struct {
 	Name      string
 	Overrides map[string]Override `yaml:"overrides"` // by instance address
+	State     *State              `yaml:"state"`     // nil: no backend declared
+}
+
+// State names an OpenTofu backend and its configuration, passed through as-is.
+type State struct {
+	Backend string         `yaml:"backend" json:"backend"`
+	Config  map[string]any `yaml:"config" json:"config,omitempty"`
 }
 
 // Load reads the blueprint rooted at dir: its project file and every
@@ -155,8 +162,12 @@ func LoadEnvironment(dir, name string) (*Environment, error) {
 		return nil, fmt.Errorf("environment name %q must match %s", name, NamePattern)
 	}
 	env := &Environment{Name: name}
-	if err := decodeYAML(filepath.Join(dir, environmentsDir, name+".yaml"), env); err != nil {
+	path := filepath.Join(dir, environmentsDir, name+".yaml")
+	if err := decodeYAML(path, env); err != nil {
 		return nil, err
+	}
+	if env.State != nil && !module.IdentPattern.MatchString(env.State.Backend) {
+		return nil, fmt.Errorf("%s: state.backend %q must be an OpenTofu backend name such as local or s3", path, env.State.Backend)
 	}
 	return env, nil
 }

@@ -30,6 +30,7 @@ type Resolved struct {
 type Config struct {
 	Environment string
 	Instances   []*Resolved // sorted by address
+	State       *State      // backend for the workspace; nil writes none
 }
 
 // Ref is a reference ${<kind>.<name>.out.<output>[.<path>...]} inside a spec string.
@@ -168,6 +169,13 @@ func Resolve(bp *Blueprint, env *Environment) (*Config, error) {
 	}
 
 	cfg := &Config{Environment: env.Name}
+	if env.State != nil {
+		conf, err := module.Normalize(orEmpty(env.State.Config))
+		if err != nil {
+			return nil, fmt.Errorf("state.config: %w", err)
+		}
+		cfg.State = &State{Backend: env.State.Backend, Config: conf.(map[string]any)}
+	}
 	for _, r := range resolved {
 		cfg.Instances = append(cfg.Instances, r)
 	}
