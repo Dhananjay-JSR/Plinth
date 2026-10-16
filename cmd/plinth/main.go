@@ -22,6 +22,7 @@ const usage = `usage:
   plinth apply    [-blueprint DIR] -env NAME [-plan FILE] [-auto-approve]
   plinth destroy  [-blueprint DIR] -env NAME [-auto-approve]
   plinth drift    [-blueprint DIR] -env NAME
+  plinth init     [DIR]
   plinth module validate DIR
   plinth --version
 `
@@ -64,6 +65,8 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return destroyCommand(args[1:], stdin, stdout, stderr)
 	case "drift":
 		return driftCommand(args[1:], stdout, stderr)
+	case "init":
+		return initCommand(args[1:], stdout, stderr)
 	case "module":
 		if len(args) == 3 && args[1] == "validate" {
 			return moduleValidate(args[2], stdout, stderr)

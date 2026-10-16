@@ -13,13 +13,13 @@ import (
 
 	"github.com/Dhananjay-JSR/Plinth/internal/blueprint"
 	"github.com/Dhananjay-JSR/Plinth/internal/generate"
+	"github.com/Dhananjay-JSR/Plinth/internal/scaffold"
 	"github.com/Dhananjay-JSR/Plinth/internal/tofu"
 )
 
 const (
 	planFile         = "tfplan"
-	manifestSuffix   = ".manifest.json" // saved next to a plan file to detect staleness
-	plinthGitignore  = "build/\nstate/\n"
+	manifestSuffix   = ".manifest.json"         // saved next to a plan file to detect staleness
 	defaultStatePath = "../../state/%s.tfstate" // relative to .plinth/build/<env>
 )
 
@@ -45,7 +45,7 @@ func prepare(bpDir, env string, stdout, stderr io.Writer) (*workspace, error) {
 	plinthDir := filepath.Join(bpDir, ".plinth")
 	// State can hold secrets: keep it and the build output out of git.
 	if _, err := os.Stat(filepath.Join(plinthDir, ".gitignore")); os.IsNotExist(err) {
-		if err := os.WriteFile(filepath.Join(plinthDir, ".gitignore"), []byte(plinthGitignore), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(plinthDir, ".gitignore"), []byte(scaffold.Gitignore), 0o644); err != nil {
 			return nil, err
 		}
 	}

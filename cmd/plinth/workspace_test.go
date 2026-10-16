@@ -4,9 +4,12 @@ import (
 	"bytes"
 	"os"
 	"os/exec"
+
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/Dhananjay-JSR/Plinth/internal/scaffold"
 )
 
 // copyBlueprint copies the fixture blueprint into a temp dir, pointing its
@@ -64,7 +67,7 @@ func TestPlanAndApply(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(bp, ".plinth/state/prod.tfstate")); err != nil {
 		t.Errorf("default local state not written: %v", err)
 	}
-	if got, _ := os.ReadFile(filepath.Join(bp, ".plinth/.gitignore")); string(got) != plinthGitignore {
+	if got, _ := os.ReadFile(filepath.Join(bp, ".plinth/.gitignore")); string(got) != scaffold.Gitignore {
 		t.Errorf(".plinth/.gitignore = %q", got)
 	}
 	plinth("", append([]string{"apply"}, env...)...).expect(t, 0, "prod is up to date.")
