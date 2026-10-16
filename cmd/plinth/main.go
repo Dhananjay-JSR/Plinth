@@ -6,6 +6,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime/debug"
+	"strings"
 
 	"github.com/Dhananjay-JSR/Plinth/internal/blueprint"
 	"github.com/Dhananjay-JSR/Plinth/internal/generate"
@@ -27,6 +29,18 @@ const usage = `usage:
 // version is set at release build time with -ldflags "-X main.version=<v>".
 var version = "dev"
 
+// buildVersion is the release version, or for `go install ...@vX.Y.Z` builds
+// (which set no ldflags) the module version Go recorded in the binary.
+func buildVersion() string {
+	if version != "dev" {
+		return version
+	}
+	if info, ok := debug.ReadBuildInfo(); ok && info.Main.Version != "" && info.Main.Version != "(devel)" {
+		return strings.TrimPrefix(info.Main.Version, "v")
+	}
+	return version
+}
+
 func main() { os.Exit(run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr)) }
 
 // run returns the exit code: 0 ok, 1 invalid configuration or failure, 2 bad
@@ -38,7 +52,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	}
 	switch args[0] {
 	case "--version", "version":
-		fmt.Fprintln(stdout, "plinth", version)
+		fmt.Fprintln(stdout, "plinth", buildVersion())
 		return 0
 	case "validate", "render":
 		return blueprintCommand(args[0], args[1:], stdout, stderr)
