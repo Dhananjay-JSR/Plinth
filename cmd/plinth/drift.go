@@ -41,6 +41,9 @@ func driftReport(planJSON []byte) ([]string, error) {
 		}
 		var lines []string
 		diff("", c.Before, c.After, c.BeforeSensitive, c.AfterSensitive, &lines)
+		if len(lines) == 0 {
+			continue // only provider normalization (null read back as [] or 0), not drift
+		}
 		entry := fmt.Sprintf("~ %s  %s", where, res)
 		for _, l := range lines {
 			entry += "\n    " + l
@@ -94,7 +97,7 @@ func diff(path string, before, after, sensBefore, sensAfter any, out *[]string) 
 		}
 		return
 	}
-	if reflect.DeepEqual(before, after) {
+	if equivalent(before, after) {
 		return
 	}
 	if anySensitive(sensBefore) || anySensitive(sensAfter) {
@@ -139,4 +142,61 @@ func show(v any) string {
 		return fmt.Sprint(v)
 	}
 	return string(b)
+}
+
+// equivalent treats an absent value and an empty one (null, "", 0, false, [],
+// {}) as the same, as OpenTofu's own plan does. Providers often store null and
+// read back an empty value; that is normalization, not a change made outside.
+func equivalent(a, b any) bool {
+	if empty(a) && empty(b) {
+		return true
+	}
+	switch x := a.(type) {
+	case map[string]any:
+		y, ok := b.(map[string]any)
+		if !ok {
+			return false
+		}
+		for k, v := range x {
+			if !equivalent(v, y[k]) {
+				return false
+			}
+		}
+		for k, v := range y {
+			if _, seen := x[k]; !seen && !empty(v) {
+				return false
+			}
+		}
+		return true
+	case []any:
+		y, ok := b.([]any)
+		if !ok || len(x) != len(y) {
+			return false
+		}
+		for i := range x {
+			if !equivalent(x[i], y[i]) {
+				return false
+			}
+		}
+		return true
+	}
+	return reflect.DeepEqual(a, b)
+}
+
+func empty(v any) bool {
+	switch t := v.(type) {
+	case nil:
+		return true
+	case string:
+		return t == ""
+	case bool:
+		return !t
+	case float64:
+		return t == 0
+	case []any:
+		return len(t) == 0
+	case map[string]any:
+		return len(t) == 0
+	}
+	return false
 }

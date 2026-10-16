@@ -60,3 +60,41 @@ func TestInstanceAddr(t *testing.T) {
 		}
 	}
 }
+
+// Shaped like the Docker provider right after apply: empty settings stored as
+// null are read back as [] / {} / 0. That is not drift.
+const normalizationJSON = `{"resource_drift":[
+ {"address":"module.application__whoami.docker_container.this","module_address":"module.application__whoami",
+  "type":"docker_container","name":"this",
+  "change":{"actions":["update"],
+   "before":{"dns":null,"log_opts":null,"networks_advanced":[{"name":"n","gw_priority":null}],"must_run":true,"ports":[{"external":18081}]},
+   "after": {"dns":[],"log_opts":{},"networks_advanced":[{"name":"n","gw_priority":0}],"must_run":true,"ports":[{"external":18081}]}}},
+ {"address":"module.network__main.docker_network.this","module_address":"module.network__main",
+  "type":"docker_network","name":"this",
+  "change":{"actions":["update"],"before":{"ipam_options":null},"after":{"ipam_options":{}}}}
+]}`
+
+func TestDriftIgnoresProviderNormalization(t *testing.T) {
+	report, err := driftReport([]byte(normalizationJSON))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(report) != 0 {
+		t.Fatalf("normalization reported as drift:\n%s", strings.Join(report, "\n"))
+	}
+
+	// A real change next to the noise is still reported, without the noise.
+	real := strings.Replace(normalizationJSON, `"must_run":true,"ports":[{"external":18081}]}}}`, `"must_run":false,"ports":[]}}}`, 1)
+	report, _ = driftReport([]byte(real))
+	got := strings.Join(report, "\n")
+	for _, want := range []string{"~ application/whoami  docker_container.this", "must_run: true → false", `ports: [{"external":18081}] → []`} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q in:\n%s", want, got)
+		}
+	}
+	for _, noise := range []string{"dns", "log_opts", "gw_priority", "network/main"} {
+		if strings.Contains(got, noise) {
+			t.Errorf("noise %q reported:\n%s", noise, got)
+		}
+	}
+}

@@ -300,6 +300,10 @@ func driftCommand(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
+	if len(report) == 0 {
+		fmt.Fprintf(stdout, "%s is in sync with its state.\n", *env)
+		return 0
+	}
 	for _, entry := range report {
 		fmt.Fprintln(stdout, entry)
 	}
