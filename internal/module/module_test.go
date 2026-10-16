@@ -53,7 +53,7 @@ func TestLoad(t *testing.T) {
 func TestLoadRejectsBadContract(t *testing.T) {
 	for name, tc := range map[string]struct{ contract, want string }{
 		"double underscore kind": {"kind: a__b\nflavor: f\nversion: \"1\"\n", "double underscores"},
-		"untyped catalog":        {"kind: a\nflavor: f\nversion: \"1\"\noutputs:\n  default: { type: kubernetes_cluster }\n", "<catalog>/<name>"},
+		"no namespace":           {"kind: a\nflavor: f\nversion: \"1\"\noutputs:\n  default: { type: kubernetes_cluster }\n", "<namespace>/<name>"},
 		"unknown field":          {"kind: a\nflavor: f\nversion: \"1\"\nintent: a\n", "intent"},
 		"bad schema":             {"kind: a\nflavor: f\nversion: \"1\"\nspec: { type: nope }\n", "spec schema"},
 	} {

@@ -92,7 +92,7 @@ func (m *Module) check() error {
 			errs = append(errs, fmt.Errorf("input %q must be lower_snake_case", name))
 		}
 		if !OutputTypePattern.MatchString(in.Type) {
-			errs = append(errs, fmt.Errorf("input %q: type %q must be <catalog>/<name>", name, in.Type))
+			errs = append(errs, fmt.Errorf("input %q: type %q must be <namespace>/<name>", name, in.Type))
 		}
 	}
 	for name, out := range m.Outputs {
@@ -100,7 +100,7 @@ func (m *Module) check() error {
 			errs = append(errs, fmt.Errorf("output %q must be lower_snake_case", name))
 		}
 		if !OutputTypePattern.MatchString(out.Type) {
-			errs = append(errs, fmt.Errorf("output %q: type %q must be <catalog>/<name>", name, out.Type))
+			errs = append(errs, fmt.Errorf("output %q: type %q must be <namespace>/<name>", name, out.Type))
 		}
 	}
 	if len(errs) > 0 {
