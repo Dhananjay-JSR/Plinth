@@ -1,5 +1,9 @@
 # Plinth
 
+[![CI](https://github.com/Dhananjay-JSR/Plinth/actions/workflows/ci.yml/badge.svg)](https://github.com/Dhananjay-JSR/Plinth/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/Dhananjay-JSR/Plinth)](https://github.com/Dhananjay-JSR/Plinth/releases)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+
 **Describe infrastructure in a few lines of JSON. Get plain OpenTofu out.**
 
 A platform team writes infrastructure once, as reusable modules. Every

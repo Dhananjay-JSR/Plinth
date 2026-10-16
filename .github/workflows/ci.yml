@@ -1,0 +1,53 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+# A newer push to the same branch or PR makes an in-flight run pointless.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v2 # Go and OpenTofu at the versions in mise.toml
+      - run: go test ./...
+
+  # The README promises OpenTofu 1.6 or newer; prove it on every change.
+  min-tofu:
+    name: test (OpenTofu 1.6.0)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v2
+      - run: mise exec opentofu@1.6.0 -- sh -c 'tofu version && go test ./...'
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v2
+      - name: gofmt
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "::error::not gofmt-formatted:"
+            echo "$unformatted"
+            exit 1
+          fi
+      - run: go vet ./...
+      - run: mise exec shellcheck@latest -- shellcheck install.sh
+      - run: mise exec actionlint@latest -- actionlint
