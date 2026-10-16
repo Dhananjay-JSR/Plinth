@@ -1,0 +1,134 @@
+name: release
+
+# Push a tag like v0.1.0 to release. The tests run first; nothing is published
+# unless they pass. Each binary is built on its own platform and run before it
+# is packaged, then the archives and SHA256SUMS are published together.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+env:
+  BINARY: plinth
+
+jobs:
+  verify:
+    name: check tag
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - id: v
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          # The version ends up in archive names and the install URL.
+          if ! printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$'; then
+            echo "::error::tag ${GITHUB_REF_NAME} is not vMAJOR.MINOR.PATCH"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  test:
+    name: test (${{ matrix.os }})
+    needs: verify
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v2 # Go and OpenTofu at the versions in mise.toml
+      - run: go test ./...
+
+  build:
+    name: ${{ matrix.goos }}-${{ matrix.goarch }}
+    needs: [verify, test]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest,    goos: linux,  goarch: amd64 }
+          - { os: ubuntu-24.04-arm, goos: linux,  goarch: arm64 }
+          - { os: macos-latest,     goos: darwin, goarch: arm64 }
+          - { os: macos-latest,     goos: darwin, goarch: amd64 } # cross-built; arm64 runner
+    env:
+      VERSION: ${{ needs.verify.outputs.version }}
+      GOOS: ${{ matrix.goos }}
+      GOARCH: ${{ matrix.goarch }}
+      CGO_ENABLED: "0"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v2
+
+      - name: Build
+        run: go build -trimpath -ldflags "-s -w -X main.version=$VERSION" -o "dist/$BINARY" ./cmd/plinth
+
+      - name: Check it runs
+        if: matrix.goarch != 'amd64' || matrix.goos != 'darwin'
+        run: |
+          out=$("dist/$BINARY" --version)
+          test "$out" = "plinth $VERSION"
+          "dist/$BINARY" validate -blueprint testdata/blueprints/checkout -env prod
+
+      - name: Check it is the right architecture
+        if: matrix.goarch == 'amd64' && matrix.goos == 'darwin'
+        run: file "dist/$BINARY" | grep -q x86_64
+
+      - name: Package
+        run: |
+          name="$BINARY-$VERSION-$GOOS-$GOARCH"
+          mkdir -p "pkg/$name"
+          cp "dist/$BINARY" README.md "pkg/$name/"
+          tar -C pkg -czf "pkg/$name.tar.gz" "$name"
+          if command -v sha256sum > /dev/null; then
+            sha256sum "pkg/$name.tar.gz" | cut -d' ' -f1 > "pkg/$name.tar.gz.sha256"
+          else
+            shasum -a 256 "pkg/$name.tar.gz" | cut -d' ' -f1 > "pkg/$name.tar.gz.sha256"
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.goos }}-${{ matrix.goarch }}
+          path: |
+            pkg/*.tar.gz
+            pkg/*.sha256
+          if-no-files-found: error
+
+  publish:
+    name: publish release
+    needs: [verify, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Collect checksums
+        run: |
+          cd artifacts
+          for f in *.sha256; do
+            printf '%s  %s\n' "$(cat "$f")" "${f%.sha256}"
+          done > SHA256SUMS
+          rm -f -- *.sha256
+          cat SHA256SUMS
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          name: plinth ${{ needs.verify.outputs.version }}
+          generate_release_notes: true
+          body: |
+            ## Install
+
+            ```bash
+            curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/install.sh | sh
+            ```
+
+            The installer picks the archive for your platform and verifies it against `SHA256SUMS`.
+          files: |
+            artifacts/*.tar.gz
+            artifacts/SHA256SUMS
