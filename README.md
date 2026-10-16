@@ -207,14 +207,41 @@ application/checkout-api: spec/port: got string, want integer
 
 ### Try it
 
-The repository ships this example with simulated modules that use OpenTofu's
-built-in `terraform_data`, so it applies with no cloud account and no cost:
+`plinth init -example` writes a complete project: a blueprint plus its own
+catalog of modules.
 
 ```bash
-git clone https://github.com/Dhananjay-JSR/Plinth.git && cd Plinth
-plinth apply   -blueprint testdata/blueprints/checkout -env prod
-plinth destroy -blueprint testdata/blueprints/checkout -env prod   # type "prod" to confirm
+plinth init -example sim shop     # simulated modules: no cloud, no Docker, no cost
+cd shop
+plinth apply -env dev
+plinth destroy -env dev           # type "dev" to confirm
 ```
+
+`-example docker` is the same idea with real containers. It needs Docker, local
+or remote (`DOCKER_HOST=ssh://user@host`), and uses ports 18081 and 18082 on
+`127.0.0.1`.
+
+### Start your own
+
+```bash
+plinth init shop                                         # an empty blueprint
+plinth module init catalog/modules/cache/redis/1.0       # a module that validates and applies as generated
+plinth add -blueprint shop -module redis/1.0 cache/sessions
+```
+
+`plinth add` reads the module's contract: it fills in each required setting it
+can, connects each input to the one resource that provides it, and lists what
+is left for you:
+
+```console
+$ plinth add -module sim/1.0 application/admin
+created application/instances/admin.json
+  inputs.kubernetes_details connected to kubernetes_cluster/main
+  fill in: spec.image (string)
+  fill in: spec.port (integer)
+```
+
+None of these commands ever overwrite an existing file.
 
 ## Commands
 
@@ -227,6 +254,9 @@ plinth destroy -blueprint testdata/blueprints/checkout -env prod   # type "prod"
 | `plinth destroy -env <name>` | Destroy everything in the environment; confirm by typing its name |
 | `plinth drift -env <name>` | Report changes made outside Plinth; exit 2 if any |
 | `plinth render -env <name> -out <dir>` | Write the OpenTofu workspace to an empty folder (export) |
+| `plinth init [-example sim\|docker] [dir]` | Start a blueprint, or write a runnable sample project |
+| `plinth add -module <flavor>/<version> <kind>/<name>` | Create a resource instance, pre-filled from its module |
+| `plinth module init <dir>` | Create a module; kind, flavor and version come from a `modules/<kind>/<flavor>/<version>` path or flags |
 | `plinth module validate <dir>` | Check a module's contract and OpenTofu code |
 | `-blueprint <dir>` | Blueprint location (default: current directory) |
 | `-auto-approve` | Skip the confirmation on `apply` and `destroy` |
