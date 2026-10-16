@@ -4,12 +4,12 @@
   "modules": {
     "application/fake/1.0": {
       "catalog": "core",
-      "digest": "sha256:153fb86efca5e980c719841c5b7b125fe03993107ebc4fa20afa1bded1438220"
+      "digest": "sha256:7ebd1ca21c01a1e346ba23d666fac476c040d4042d53edf7207bd09a5233c3d6"
     },
     "kubernetes_cluster/fake/1.0": {
       "catalog": "core",
-      "digest": "sha256:97f360846e8b1eec1d22cc8d07a38f01e2d0d15270cca4fd3755fb1b24627003"
+      "digest": "sha256:6562730267ab4d0a52dceff399f7f9dd99e126b7e71de6b40ae34d2d61e25543"
     }
   },
-  "effective_config": "sha256:bf49699a163b43d3ec9af0c26d1c7193f9500c5a3ece1fd111c39c13b292a3f3"
+  "effective_config": "sha256:127c008a4e9132c89bfd7d58c786277a1be9d98a8e5e309700674d3d8fe722b6"
 }

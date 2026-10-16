@@ -17,6 +17,7 @@ import (
 
 	"github.com/Dhananjay-JSR/Plinth/internal/blueprint"
 	"github.com/Dhananjay-JSR/Plinth/internal/catalog"
+	"github.com/Dhananjay-JSR/Plinth/internal/module"
 	"github.com/hashicorp/hcl/v2/hclwrite"
 )
 
@@ -60,6 +61,10 @@ func Render(cfg *blueprint.Config, out string) error {
 			return err
 		} else if got != m.Digest {
 			return fmt.Errorf("module %s changed during render (digest %s, resolved %s)", id, got, m.Digest)
+		}
+		// Added after the digest check: the digest pins the author's files only.
+		if err := writeFile(filepath.Join(dst, module.VariablesFile), []byte(module.Variables)); err != nil {
+			return err
 		}
 	}
 

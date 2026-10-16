@@ -70,6 +70,9 @@ func Load(dir string) (*Module, error) {
 	if err := m.check(); err != nil {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
+	if err := checkReservedVariables(dir); err != nil {
+		return nil, fmt.Errorf("%s: %w", dir, err)
+	}
 	return &m, nil
 }
 
