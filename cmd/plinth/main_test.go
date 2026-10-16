@@ -31,7 +31,7 @@ func TestRun(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			var stdout, stderr bytes.Buffer
-			code := run(tc.args, &stdout, &stderr)
+			code := run(tc.args, strings.NewReader(""), &stdout, &stderr)
 			if code != tc.code || !strings.Contains(stdout.String(), tc.wantStdout) || !strings.Contains(stderr.String(), tc.wantStderr) {
 				t.Errorf("code %d, stdout %q, stderr %q", code, stdout.String(), stderr.String())
 			}
@@ -65,7 +65,7 @@ func TestModuleValidate(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			var stdout, stderr bytes.Buffer
-			code := run(tc.args, &stdout, &stderr)
+			code := run(tc.args, strings.NewReader(""), &stdout, &stderr)
 			if code != tc.code || !strings.Contains(stdout.String(), tc.wantStdout) || !strings.Contains(stderr.String(), tc.wantStderr) {
 				t.Errorf("code %d, stdout %q, stderr %q", code, stdout.String(), stderr.String())
 			}

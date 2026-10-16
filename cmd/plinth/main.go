@@ -2,7 +2,6 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -17,6 +16,8 @@ import (
 const usage = `usage:
   plinth validate [-blueprint DIR] -env NAME
   plinth render   [-blueprint DIR] -env NAME -out DIR
+  plinth plan     [-blueprint DIR] -env NAME [-out FILE]
+  plinth apply    [-blueprint DIR] -env NAME [-plan FILE] [-auto-approve]
   plinth module validate DIR
   plinth --version
 `
@@ -24,10 +25,10 @@ const usage = `usage:
 // version is set at release build time with -ldflags "-X main.version=<v>".
 var version = "dev"
 
-func main() { os.Exit(run(os.Args[1:], os.Stdout, os.Stderr)) }
+func main() { os.Exit(run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr)) }
 
 // run returns the exit code: 0 ok, 1 invalid configuration or failure, 2 bad usage.
-func run(args []string, stdout, stderr io.Writer) int {
+func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
 		fmt.Fprint(stderr, usage)
 		return 2
@@ -38,6 +39,10 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return 0
 	case "validate", "render":
 		return blueprintCommand(args[0], args[1:], stdout, stderr)
+	case "plan":
+		return planCommand(args[1:], stdout, stderr)
+	case "apply":
+		return applyCommand(args[1:], stdin, stdout, stderr)
 	case "module":
 		if len(args) == 3 && args[1] == "validate" {
 			return moduleValidate(args[2], stdout, stderr)
@@ -48,10 +53,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 }
 
 func blueprintCommand(cmd string, args []string, stdout, stderr io.Writer) int {
-	fs := flag.NewFlagSet(cmd, flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	dir := fs.String("blueprint", ".", "blueprint directory")
-	env := fs.String("env", "", "environment name")
+	fs, dir, env := envFlags(cmd, stderr)
 	out := fs.String("out", "", "output directory for the workspace bundle (render)")
 	if err := fs.Parse(args); err != nil {
 		return 2
