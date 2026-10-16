@@ -157,7 +157,10 @@ func decodeYAML(path string, v any) error {
 	return nil
 }
 
+// joinSorted joins errors in a stable order, dropping repeats: an instance that
+// reaches a bad producer through both an input and a reference reports it once.
 func joinSorted(errs []error) error {
 	slices.SortFunc(errs, func(a, b error) int { return strings.Compare(a.Error(), b.Error()) })
+	errs = slices.CompactFunc(errs, func(a, b error) bool { return a.Error() == b.Error() })
 	return errors.Join(errs...)
 }

@@ -205,6 +205,16 @@ func TestResolveReportsAllErrors(t *testing.T) {
 	}
 }
 
+func TestResolveReportsEachErrorOnce(t *testing.T) {
+	// checkout-api reaches the cluster through an input and a reference.
+	_, err := resolve(t, scenario(t, map[string]string{
+		prodFile: "overrides:\n  kubernetes_cluster/default:\n    disabled: true\n",
+	}), "prod")
+	if err == nil || strings.Count(err.Error(), "which is disabled") != 1 {
+		t.Fatalf("want the disabled error exactly once, got:\n%v", err)
+	}
+}
+
 func TestParseRef(t *testing.T) {
 	r, err := ParseRef("kubernetes_cluster.default.out.default.attributes.cluster_name")
 	if err != nil || r.Addr() != "kubernetes_cluster/default" || r.Output != "default" || strings.Join(r.Path, ".") != "attributes.cluster_name" {
