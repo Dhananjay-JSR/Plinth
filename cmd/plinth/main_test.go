@@ -19,6 +19,7 @@ func TestRun(t *testing.T) {
 		wantStderr string
 	}{
 		"no command":         {nil, 2, "", "usage:"},
+		"version":            {[]string{"--version"}, 0, "plinth dev", ""},
 		"unknown command":    {[]string{"apply"}, 2, "", "usage:"},
 		"missing env":        {[]string{"validate", "-blueprint", fixture}, 2, "", "usage:"},
 		"render without out": {[]string{"render", "-blueprint", fixture, "-env", "prod"}, 2, "", "usage:"},

@@ -14,12 +14,20 @@ import (
 const usage = `usage:
   plinth validate [-blueprint DIR] -env NAME
   plinth render   [-blueprint DIR] -env NAME -out DIR
+  plinth --version
 `
+
+// version is set at release build time with -ldflags "-X main.version=<v>".
+var version = "dev"
 
 func main() { os.Exit(run(os.Args[1:], os.Stdout, os.Stderr)) }
 
 // run returns the exit code: 0 ok, 1 invalid configuration or failure, 2 bad usage.
 func run(args []string, stdout, stderr io.Writer) int {
+	if len(args) == 1 && (args[0] == "--version" || args[0] == "version") {
+		fmt.Fprintln(stdout, "plinth", version)
+		return 0
+	}
 	if len(args) == 0 || (args[0] != "validate" && args[0] != "render") {
 		fmt.Fprint(stderr, usage)
 		return 2
