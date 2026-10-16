@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -90,18 +91,34 @@ func Load(dir string) (*Blueprint, error) {
 	}
 	slices.SortFunc(bp.Catalogs, func(a, b catalog.Catalog) int { return strings.Compare(a.Name, b.Name) })
 
-	files, err := filepath.Glob(filepath.Join(dir, "*", "instances", "*.json"))
-	if err != nil {
-		return nil, err
-	}
+	// Every .json outside hidden folders must be a resource instance at
+	// <kind>/instances/<name>.json; a misplaced one is an error, not silently ignored.
 	var errs []error
-	for _, path := range files {
+	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() && path != dir && strings.HasPrefix(d.Name(), ".") {
+			return filepath.SkipDir
+		}
+		if d.IsDir() || filepath.Ext(path) != ".json" {
+			return nil
+		}
+		rel, _ := filepath.Rel(dir, path)
+		if parts := strings.Split(filepath.ToSlash(rel), "/"); len(parts) != 3 || parts[1] != "instances" {
+			errs = append(errs, fmt.Errorf("%s: resource instances must live at <kind>/instances/<name>.json", rel))
+			return nil
+		}
 		inst, err := loadInstance(path)
 		if err != nil {
 			errs = append(errs, err)
-			continue
+			return nil
 		}
 		bp.Instances[inst.Addr()] = inst
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 	if len(errs) > 0 {
 		return nil, joinSorted(errs)

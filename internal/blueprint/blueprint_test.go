@@ -181,6 +181,14 @@ func TestResolveErrors(t *testing.T) {
 			map[string]string{"network/instances/x.json": `{"kind":"application","flavor":"fake","version":"1.0"}`},
 			`kind "application" does not match its directory "network"`,
 		},
+		"instance file outside instances/": {
+			map[string]string{"application/checkout-api.json": app(clusterInput, okSpec)},
+			"application/checkout-api.json: resource instances must live at <kind>/instances/<name>.json",
+		},
+		"instance file nested too deep": {
+			map[string]string{"application/instances/old/x.json": app(clusterInput, okSpec)},
+			"application/instances/old/x.json: resource instances must live at",
+		},
 		"unknown instance field": {
 			map[string]string{appFile: `{"kind":"application","flavor":"fake","version":"1.0","intent":"x"}`},
 			`unknown field "intent"`,
@@ -202,6 +210,12 @@ func TestResolveReportsAllErrors(t *testing.T) {
 	}), "prod")
 	if err == nil || strings.Count(err.Error(), "\n") < 2 {
 		t.Fatalf("want three errors together, got: %v", err)
+	}
+}
+
+func TestLoadIgnoresHiddenFolders(t *testing.T) {
+	if _, err := resolve(t, scenario(t, map[string]string{".vscode/settings.json": "{}"}), "prod"); err != nil {
+		t.Fatalf("JSON in a hidden folder should be ignored: %v", err)
 	}
 }
 
