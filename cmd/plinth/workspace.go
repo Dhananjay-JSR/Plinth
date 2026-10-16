@@ -237,3 +237,60 @@ func copyFile(src, dst string) error {
 	}
 	return os.WriteFile(dst, data, 0o600) // plans can contain secrets
 }
+
+func destroyCommand(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+	fs, dir, env := envFlags("destroy", stderr)
+	auto := fs.Bool("auto-approve", false, "skip the confirmation prompt")
+	if !parseEnv(fs, args, env, stderr) {
+		return 2
+	}
+	w, err := prepare(*dir, *env, stdout, stderr)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
+	changes, err := w.plan("-destroy")
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
+	if !changes {
+		fmt.Fprintf(stdout, "\nNothing to destroy in %s.\n", *env)
+		return 0
+	}
+	// Typing the environment's name is deliberate in a way a habitual "yes" is not.
+	if !*auto && !confirm(stdin, stdout, fmt.Sprintf("\nDestroy everything above in %s? Type the environment name to confirm: ", *env), *env) {
+		fmt.Fprintln(stderr, "Destroy cancelled.")
+		return 1
+	}
+	return exitOn(w.applySaved(), stderr)
+}
+
+// driftCommand compares real infrastructure with the environment's state without
+// changing either: exit 0 in sync, 2 drifted, 1 on error.
+func driftCommand(args []string, stdout, stderr io.Writer) int {
+	fs, dir, env := envFlags("drift", stderr)
+	if !parseEnv(fs, args, env, stderr) {
+		return 2
+	}
+	w, err := prepare(*dir, *env, stdout, stderr)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
+	code, err := w.tf.Run(w.dir, "plan", "-refresh-only", "-input=false", "-detailed-exitcode")
+	switch {
+	case err != nil:
+		fmt.Fprintln(stderr, err)
+		return 1
+	case code == 0:
+		fmt.Fprintf(stdout, "\n%s is in sync with its state.\n", *env)
+		return 0
+	case code == 2:
+		fmt.Fprintf(stdout, "\n%s has drifted: real infrastructure differs from its state (see above).\n", *env)
+		return 2
+	default:
+		fmt.Fprintln(stderr, "tofu plan -refresh-only failed")
+		return 1
+	}
+}

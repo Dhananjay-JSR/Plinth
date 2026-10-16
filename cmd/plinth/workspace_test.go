@@ -83,5 +83,38 @@ func TestPlanAndApply(t *testing.T) {
 	plinth("", append([]string{"apply"}, env...)...).expect(t, 0, "prod is up to date.")
 
 	plinth("", append([]string{"apply", "-plan", filepath.Join(t.TempDir(), "nope")}, env...)...).expect(t, 1, "was not saved by plinth plan -out")
+
+	plinth("", append([]string{"drift"}, env...)...).expect(t, 0, "prod is in sync with its state.")
+
+	plinth("yes\n", append([]string{"destroy"}, env...)...).expect(t, 1, "Destroy cancelled.") // only the env name confirms
+	plinth("prod\n", append([]string{"destroy"}, env...)...).expect(t, 0, "Resources: 0 added, 0 changed, 2 destroyed")
+	plinth("", append([]string{"destroy"}, env...)...).expect(t, 0, "Nothing to destroy in prod.")
 	plinth("", "plan", "-blueprint", bp).expect(t, 2, "usage:")
+}
+
+// TestDriftDetected uses a stand-in tofu: terraform_data has no real object
+// that can change behind OpenTofu's back, so real drift can't be produced here.
+func TestDriftDetected(t *testing.T) {
+	bin := t.TempDir()
+	write(t, filepath.Join(bin, "tofu"), `#!/bin/sh
+case "$*" in
+  "version -json") echo '{"terraform_version":"1.13.1"}' ;;
+  *" init "*) exit 0 ;;
+  *"-refresh-only"*) echo "Objects have changed outside of OpenTofu"; exit 2 ;;
+  *) exit 1 ;;
+esac
+`)
+	os.Chmod(filepath.Join(bin, "tofu"), 0o755)
+	t.Setenv("PATH", bin+":/usr/bin:/bin")
+
+	plinth("", "drift", "-blueprint", copyBlueprint(t), "-env", "prod").expect(t, 2, "prod has drifted")
+}
+
+func TestOldTofuRejected(t *testing.T) {
+	bin := t.TempDir()
+	write(t, filepath.Join(bin, "tofu"), "#!/bin/sh\necho '{\"terraform_version\":\"1.5.7\"}'\n")
+	os.Chmod(filepath.Join(bin, "tofu"), 0o755)
+	t.Setenv("PATH", bin+":/usr/bin:/bin")
+
+	plinth("", "plan", "-blueprint", copyBlueprint(t), "-env", "prod").expect(t, 1, "OpenTofu 1.5.7 found, plinth needs 1.6.0 or newer")
 }

@@ -18,6 +18,8 @@ const usage = `usage:
   plinth render   [-blueprint DIR] -env NAME -out DIR
   plinth plan     [-blueprint DIR] -env NAME [-out FILE]
   plinth apply    [-blueprint DIR] -env NAME [-plan FILE] [-auto-approve]
+  plinth destroy  [-blueprint DIR] -env NAME [-auto-approve]
+  plinth drift    [-blueprint DIR] -env NAME
   plinth module validate DIR
   plinth --version
 `
@@ -27,7 +29,8 @@ var version = "dev"
 
 func main() { os.Exit(run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr)) }
 
-// run returns the exit code: 0 ok, 1 invalid configuration or failure, 2 bad usage.
+// run returns the exit code: 0 ok, 1 invalid configuration or failure, 2 bad
+// usage (or, for drift, drift found).
 func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
 		fmt.Fprint(stderr, usage)
@@ -43,6 +46,10 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return planCommand(args[1:], stdout, stderr)
 	case "apply":
 		return applyCommand(args[1:], stdin, stdout, stderr)
+	case "destroy":
+		return destroyCommand(args[1:], stdin, stdout, stderr)
+	case "drift":
+		return driftCommand(args[1:], stdout, stderr)
 	case "module":
 		if len(args) == 3 && args[1] == "validate" {
 			return moduleValidate(args[2], stdout, stderr)
