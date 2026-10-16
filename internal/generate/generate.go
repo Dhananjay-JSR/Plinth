@@ -53,7 +53,7 @@ func Render(cfg *blueprint.Config, out string) error {
 	for _, id := range ids {
 		m := modules[id]
 		dst := filepath.Join(out, "modules", filepath.FromSlash(id))
-		if err := copyDir(m.Module.Dir, dst); err != nil {
+		if err := CopyDir(m.Module.Dir, dst); err != nil {
 			return err
 		}
 		// The catalog may have changed since resolution; never ship unpinned content.
@@ -227,7 +227,8 @@ func buildManifest(cfg *blueprint.Config, modules map[string]*catalog.Resolved) 
 	return mf
 }
 
-func copyDir(src, dst string) error {
+// CopyDir copies the regular files of a module directory; anything else is rejected.
+func CopyDir(src, dst string) error {
 	return filepath.WalkDir(src, func(path string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
 			return err

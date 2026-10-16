@@ -6,14 +6,18 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 
 	"github.com/Dhananjay-JSR/Plinth/internal/blueprint"
 	"github.com/Dhananjay-JSR/Plinth/internal/generate"
+	"github.com/Dhananjay-JSR/Plinth/internal/module"
+	"github.com/Dhananjay-JSR/Plinth/internal/tofu"
 )
 
 const usage = `usage:
   plinth validate [-blueprint DIR] -env NAME
   plinth render   [-blueprint DIR] -env NAME -out DIR
+  plinth module validate DIR
   plinth --version
 `
 
@@ -24,21 +28,32 @@ func main() { os.Exit(run(os.Args[1:], os.Stdout, os.Stderr)) }
 
 // run returns the exit code: 0 ok, 1 invalid configuration or failure, 2 bad usage.
 func run(args []string, stdout, stderr io.Writer) int {
-	if len(args) == 1 && (args[0] == "--version" || args[0] == "version") {
-		fmt.Fprintln(stdout, "plinth", version)
-		return 0
-	}
-	if len(args) == 0 || (args[0] != "validate" && args[0] != "render") {
+	if len(args) == 0 {
 		fmt.Fprint(stderr, usage)
 		return 2
 	}
-	cmd := args[0]
+	switch args[0] {
+	case "--version", "version":
+		fmt.Fprintln(stdout, "plinth", version)
+		return 0
+	case "validate", "render":
+		return blueprintCommand(args[0], args[1:], stdout, stderr)
+	case "module":
+		if len(args) == 3 && args[1] == "validate" {
+			return moduleValidate(args[2], stdout, stderr)
+		}
+	}
+	fmt.Fprint(stderr, usage)
+	return 2
+}
+
+func blueprintCommand(cmd string, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet(cmd, flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	dir := fs.String("blueprint", ".", "blueprint directory")
 	env := fs.String("env", "", "environment name")
 	out := fs.String("out", "", "output directory for the workspace bundle (render)")
-	if err := fs.Parse(args[1:]); err != nil {
+	if err := fs.Parse(args); err != nil {
 		return 2
 	}
 	if *env == "" || (cmd == "render" && *out == "") || fs.NArg() > 0 {
@@ -61,6 +76,53 @@ func run(args []string, stdout, stderr io.Writer) int {
 	}
 	fmt.Fprintf(stdout, "%s: rendered %d resource instances to %s\n", *env, len(cfg.Instances), *out)
 	return 0
+}
+
+// moduleValidate checks a module's contract, then runs tofu validate on a copy
+// with Plinth's generated variables added, as it would be in a bundle.
+func moduleValidate(dir string, stdout, stderr io.Writer) int {
+	m, err := module.Load(dir)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
+	tf, err := tofu.Find(stdout, stderr)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
+	tmp, err := os.MkdirTemp("", "plinth-module-")
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
+	defer os.RemoveAll(tmp)
+	if err := generate.CopyDir(dir, tmp); err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
+	if err := os.WriteFile(filepath.Join(tmp, module.VariablesFile), []byte(module.Variables), 0o644); err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
+	// init output is noise unless it fails; validate's own output is the result.
+	if out, code, err := tf.Output(tmp, "init", "-backend=false", "-input=false", "-no-color"); err != nil || code != 0 {
+		fmt.Fprintf(stderr, "%s%stofu init failed\n", out, errText(err))
+		return 1
+	}
+	if code, err := tf.Run(tmp, "validate", "-no-color"); err != nil || code != 0 {
+		fmt.Fprintf(stderr, "%s%s: OpenTofu code is invalid\n", errText(err), m.ID())
+		return 1
+	}
+	fmt.Fprintf(stdout, "%s: module valid\n", m.ID())
+	return 0
+}
+
+func errText(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error() + "\n"
 }
 
 func resolve(dir, env string) (*blueprint.Config, error) {
